@@ -1,5 +1,4 @@
 const admin = require("firebase-admin");
-const { schedule } = require("@netlify/functions");
 
 if (!admin.apps.length) {
   const raw = (process.env.FIREBASE_SERVICE_ACCOUNT_B64 || "").replace(/\s/g, "");
@@ -36,7 +35,7 @@ async function enviarATokens(tokens, title, body) {
   return tokensValidos;
 }
 
-exports.handler = schedule("*/15 * * * *", async () => {
+exports.handler = async () => {
   const ahora = ahoraArgentina();
   const hoyStr = fechaYMD(ahora);
   const mananaStr = fechaYMD(new Date(ahora.getTime() + 86400000));
@@ -105,4 +104,6 @@ exports.handler = schedule("*/15 * * * *", async () => {
     console.error("Error en checkRecordatorios:", e);
     return { statusCode: 500, body: JSON.stringify({ error: e.message }) };
   }
-});
+};
+
+exports.config = { schedule: "*/15 * * * *" };

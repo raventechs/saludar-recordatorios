@@ -10,14 +10,21 @@ if (!admin.apps.length) {
 }
 const db = admin.firestore();
 
-// ── Hora actual en Argentina (UTC-3, sin horario de verano) ──
-function ahoraArgentina() {
-  const now = new Date();
-  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-  return new Date(utc - 3 * 3600000);
+// ── Hora actual en Argentina (robusto, no depende de la TZ del servidor) ──
+function partesArgentina() {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+  const parts = {};
+  fmt.formatToParts(new Date()).forEach(p => { parts[p.type] = p.value; });
+  return parts; // {year, month, day, hour, minute}
 }
-function fechaYMD(d) {
-  return d.toISOString().slice(0, 10); // ojo: como ya restamos el offset arriba, esto da la fecha de Argentina
+function sumarDiasYMD(ymd, dias) {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + dias));
+  return dt.toISOString().slice(0, 10);
 }
 
 async function enviarATokens(tokens, title, body) {
@@ -36,11 +43,11 @@ async function enviarATokens(tokens, title, body) {
 }
 
 exports.handler = async () => {
-  const ahora = ahoraArgentina();
-  const hoyStr = fechaYMD(ahora);
-  const mananaStr = fechaYMD(new Date(ahora.getTime() + 86400000));
-  const horaActual = ahora.getHours();
-  const minutoActual = ahora.getMinutes();
+  const p = partesArgentina();
+  const hoyStr = `${p.year}-${p.month}-${p.day}`;
+  const mananaStr = sumarDiasYMD(hoyStr, 1);
+  const horaActual = parseInt(p.hour, 10);
+  const minutoActual = parseInt(p.minute, 10);
 
   let avisosMed = 0, avisosTurnoAntes = 0, avisosTurnoHoy = 0;
 
@@ -98,7 +105,7 @@ exports.handler = async () => {
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ ok: true, avisosMed, avisosTurnoAntes, avisosTurnoHoy, corrida: ahora.toISOString() }),
+      body: JSON.stringify({ ok: true, avisosMed, avisosTurnoAntes, avisosTurnoHoy, horaArgentina: `${hoyStr} ${p.hour}:${p.minute}` }),
     };
   } catch (e) {
     console.error("Error en checkRecordatorios:", e);
@@ -106,4 +113,6 @@ exports.handler = async () => {
   }
 };
 
-exports.config = { schedule: "*/15 * * * *" };
+// Nota: el disparo automático lo hace cron-job.org (cada 15 min) pegándole
+// a esta URL. NO se usa exports.config de Netlify para evitar que ambos
+// sistemas disparen la función al mismo tiempo y se dupliquen los avisos.
